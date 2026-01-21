@@ -57,7 +57,7 @@ body {
     color: rgb(201, 201, 204);
 }
 .content-head{
-    font-size: 1.15em;
+    font-size: 1.1em;
     /* text-align: center; */
     font-weight: bold;
 }
@@ -108,7 +108,7 @@ body {
 }
 #content div{
     position: relative;
-    padding: 20px 5px;
+    padding: 10px 5px;
     background-color: rgb(250, 250, 250);
     border-radius: 5px;
 }
