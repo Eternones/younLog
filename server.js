@@ -3,10 +3,13 @@ import fetch from "node-fetch";
 import { JSDOM } from "jsdom";
 
 const app = express();
+const PORT = process.env.PORT || 3000;
+
 app.use(express.static("public"));
 
-app.get("/fetch", async (req, res) => {
+app.get("/api/hello", async (req, res) => {
   const url = req.query.url;
+  res.json({ message: "서버 정상 작동" });
   if (!url) return res.status(400).send("URL 없음");
 
   try {
@@ -34,5 +37,5 @@ app.get("/fetch", async (req, res) => {
 });
 
 app.listen(3000, () => {
-  console.log("http://localhost:3000");
+  console.log("Server running on port", PORT);
 });
