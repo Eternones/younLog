@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YoungLog</title>
+    <link rel="stylesheet" href="main.css">
+</head>
+
+<body>
+    <div id="Header"><span class="title-head">연곤 로그 백업 변환기</span>
+        <span class="title-desc">V 1.0.0</span>
+    </div>
+    <div id="nevigation">
+        <ul>
+            <li><a href="#">Roll20</a></li>
+            <li><a href="#">Info</a></li>
+            <li><a href="#">Cocoforia</a></li>
+        </ul>
+    </div>
+    <div id="content">
+
+        <div>
+            <div>
+                <p class="content-head">로그 링크</p>
+                <input id="url" placeholder="링크">
+                <input type="button" name="logLink" id="load" value="입력">
+            </div>
+            <div>
+                <p class="content-head">옵션</p>
+                <input type="checkbox" name="option" vaule="darkMode">다크 모드<br>
+                <input type="checkbox" name="option" vaule="deleteSkyblue">하늘색 제거<br>
+                <input type="checkbox" name="option" vaule="deleteItalic">시스템 기울임꼴 삭제<br>
+            </div>
+        </div>
+        <div>
+            <div><div id="log"></div></div>
+        </div>
+    </div>
+    <div id="footer">
+        <p>made by @Youngonest_</p>
+    </div>
+</body>
+
+<script>
+document.getElementById("load").onclick = async () => {
+  const url = document.getElementById("url").value;
+
+  const res = await fetch("/fetch?url=" + encodeURIComponent(url));
+  const data = await res.json();
+
+  const log = document.getElementById("log");
+  log.innerHTML = data.messages.join("");
+};
+</script>
+
+</html>
