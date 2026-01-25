@@ -2,29 +2,32 @@ const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
 const app = express();
+const userAgents = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1'
+];
 
 app.use(cors());
 
 app.get('/proxy/:roomId', async (req, res) => {
     const { roomId } = req.params;
-    if (roomId === 'test') return res.json({ status: 'ok' });
-
-    const targetUrl = `https://ccfolia.com/api/room/${roomId}`;
+    
+    // 무작위 User-Agent 선택
+    const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
 
     try {
-        const response = await axios.get(targetUrl, {
+        const response = await axios.get(`https://ccfolia.com/api/room/${roomId}`, {
             headers: {
-                // 실제 사용자가 브라우저로 접속하는 것처럼 보이게 만듭니다.
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-                'Accept': 'application/json, text/plain, */*',
-                'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-                'Referer': `https://ccfolia.com/rooms/${roomId}`,
-                'Origin': 'https://ccfolia.com',
-                'Sec-Fetch-Dest': 'empty',
-                'Sec-Fetch-Mode': 'cors',
-                'Sec-Fetch-Site': 'same-origin'
-            },
-            timeout: 10000 // 10초 내 응답 없으면 중단
+                'User-Agent': randomUA,
+                'Accept': 'application/json',
+                'Referer': 'https://ccfolia.com/',
+                // 아래 항목을 추가하면 더 효과적입니다.
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+            }
         });
         
         // 코코포리아 API는 성공 시 { data: { ... } } 구조를 가집니다.
