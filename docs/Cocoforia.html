@@ -19,13 +19,13 @@
             <li><a href="Cocoforia.html">Cocoforia</a></li>
         </ul>
     </div>
-    <div id="content">
 
+    <div id="content">
         <div>
             <div>
                 <p class="content-head">로그 링크</p>
-                <input id="url" placeholder="링크">
-                <input type="button" id="load" value="입력">
+                <input id="roomUrl" placeholder="https://ccfolia.com/rooms/...">
+                <button id="fetchBtn" onclick="loadCocofoliaLogs()">백업</button>
             </div>
             <div>
                 <p class="content-head">시스템 캐릭터 지정</p>
@@ -50,6 +50,11 @@
             </div>
         </div>
     </div>
+
+        <div id="status" style="text-align: center; background: #222; color: #eee; padding: 5px; font-size: 0.9rem;">
+        🟡 서버 확인 중...
+    </div>
+
     <div id="footer">
         <p>made by @Youngonest_</p>
     </div>
