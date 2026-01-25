@@ -56,7 +56,82 @@
 </body>
 
 <script>
-    window.addEventListener('DOMContentLoaded', () => {
+    // 1. 본인의 Render 서버 주소로 꼭 수정하세요!
+    const PROXY_SERVER = "https://your-service-name.onrender.com";
+
+    const statusEl = document.getElementById('status');
+    const fetchBtn = document.getElementById('fetchBtn');
+
+    // 페이지 로드 시 서버 깨우기 (Warm-up)
+    window.addEventListener('DOMContentLoaded', async () => {
+        statusEl.innerHTML = "🟡 서버 상태 확인 중...";
+        fetchBtn.disabled = true;
+
+        try {
+            // 서버에 가벼운 요청을 보냄
+            const start = Date.now();
+            await fetch(`${PROXY_SERVER}/proxy/test`); // 존재하지 않는 ID라도 요청 자체가 서버를 깨움
+
+            statusEl.innerHTML = "🟢 서버 온라인 (준비 완료)";
+            fetchBtn.disabled = false;
+        } catch (e) {
+            // 서버가 잠들어 있으면 응답에 시간이 걸립니다.
+            statusEl.innerHTML = "⏳ 서버가 잠들어 있습니다. 깨우는 중... (최대 1분 소요)";
+
+            // 5초마다 재시도하는 로직
+            const retry = setInterval(async () => {
+                try {
+                    await fetch(`${PROXY_SERVER}/proxy/test`);
+                    statusEl.innerHTML = "🟢 서버가 방금 깨어났습니다!";
+                    fetchBtn.disabled = false;
+                    clearInterval(retry);
+                } catch (err) { console.log("Waking up..."); }
+            }, 5000);
+        }
+    });
+
+    async function loadCocofoliaLogs() {
+        const urlInput = document.getElementById('roomUrl').value;
+        const roomId = urlInput.split('/').pop();
+
+        if (!roomId) return alert("URL을 입력해주세요.");
+
+        statusEl.innerText = "🚀 로그 추출 중...";
+
+        try {
+            const response = await fetch(`${PROXY_SERVER}/proxy/${roomId}`);
+            const result = await response.json();
+
+            if (result.error) throw new Error(result.error);
+
+            renderLogs(result.data.messages);
+            statusEl.innerText = `✅ ${result.data.messages.length}개의 로그를 가져왔습니다.`;
+        } catch (error) {
+            statusEl.innerText = "❌ 오류: " + error.message;
+        }
+    }
+
+    function renderLogs(messages) {
+        const contentEl = document.getElementById('content');
+        contentEl.innerHTML = "";
+        messages.forEach(msg => {
+            const div = document.createElement('div');
+            div.className = 'msg-card';
+            div.innerHTML = `
+            <div class="avatar" style="background:#444; color:white; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-right:10px;">
+                ${msg.name ? msg.name[0] : '?'}
+            </div>
+            <div>
+                <strong>${msg.name}</strong><br>
+                <span>${msg.body.replace(/\n/g, '<br>')}</span>
+            </div>
+        `;
+            div.style.display = "flex";
+            div.style.marginBottom = "15px";
+            contentEl.appendChild(div);
+        });
+    }
+    /* window.addEventListener('DOMContentLoaded', () => {
         const PROXY_SERVER = "https://본인의-서비스-이름.onrender.com";
         const statusEl = document.getElementById('status');
 
@@ -115,7 +190,7 @@
                 console.error(error);
             }
         }
-    });    
+    });    */
 </script>
 
 </html>
