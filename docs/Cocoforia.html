@@ -51,7 +51,7 @@
         </div>
     </div>
 
-        <div id="status" style="text-align: center; background: #222; color: #eee; padding: 5px; font-size: 0.9rem;">
+    <div id="status" style="text-align: center; background: #222; color: #eee; padding: 5px; font-size: 0.9rem;">
         🟡 서버 확인 중...
     </div>
 
@@ -101,18 +101,29 @@
 
         if (!roomId) return alert("URL을 입력해주세요.");
 
+        const statusEl = document.getElementById('status');
+        const logContainer = document.getElementById('log-container'); // 혹은 본인의 로그 출력 영역 ID
+
         statusEl.innerText = "🚀 로그 추출 중...";
 
         try {
             const response = await fetch(`${PROXY_SERVER}/proxy/${roomId}`);
             const result = await response.json();
 
+            // 1. 서버 에러 응답 처리
             if (result.error) throw new Error(result.error);
+
+            // 2. 데이터 존재 여부 확인 (핵심 해결책)
+            if (!result.data || !result.data.messages) {
+                throw new Error("가져올 수 있는 메시지가 없습니다. 방 설정을 확인해주세요.");
+            }
 
             renderLogs(result.data.messages);
             statusEl.innerText = `✅ ${result.data.messages.length}개의 로그를 가져왔습니다.`;
+
         } catch (error) {
             statusEl.innerText = "❌ 오류: " + error.message;
+            console.error("Detailed Error:", error);
         }
     }
 
