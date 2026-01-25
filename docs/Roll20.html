@@ -25,7 +25,7 @@
             <div>
                 <p class="content-head">로그 링크</p>
                 <input id="url" placeholder="링크">
-                <input type="button" id="load" value="입력">
+                <button onclick="archive()">백업</button>
             </div>
             <div>
                 <p class="content-head">옵션</p>
@@ -35,7 +35,7 @@
             </div>
         </div>
         <div>
-            <div><div id="log"></div></div>
+            <div><div id="result"></div></div>
         </div>
     </div>
     <div id="footer">
@@ -44,15 +44,17 @@
 </body>
 
 <script>
-document.getElementById("load").onclick = async () => {
+async function archive() {
   const url = document.getElementById("url").value;
-
-  const res = await fetch("/fetch?url=" + encodeURIComponent(url));
+  const res = await fetch("/archive", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url })
+  });
   const data = await res.json();
-
-  const log = document.getElementById("log");
-  log.innerHTML = data.messages.join("");
-};
+  document.getElementById("result").innerHTML =
+    `<a href="${data.viewer}" target="_blank">📖 뷰어 열기</a>`;
+}
 </script>
 
 </html>

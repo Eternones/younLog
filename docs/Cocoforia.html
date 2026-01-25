@@ -54,15 +54,49 @@
 </body>
 
 <script>
-document.getElementById("load").onclick = async () => {
-  const url = document.getElementById("url").value;
+async function loadCocofoliaLogs() {
+    const urlInput = document.getElementById('roomUrl').value;
+    const roomId = urlInput.split('/').pop();
+    
+    // 1. Render에서 받은 본인의 서버 주소로 변경하세요.
+    const PROXY_SERVER = "https://본인의-서비스-이름.onrender.com"; 
+    
+    const statusEl = document.getElementById('status');
+    const contentEl = document.getElementById('content');
 
-  const res = await fetch("/fetch?url=" + encodeURIComponent(url));
-  const data = await res.json();
+    statusEl.innerText = "서버에서 로그를 가져오는 중...";
 
-  const log = document.getElementById("log");
-  log.innerHTML = data.messages.join("");
-};
+    try {
+        // 2. 내 중계 서버 호출
+        const response = await fetch(`${PROXY_SERVER}/proxy/${roomId}`);
+        const result = await response.json();
+
+        if (result.error) throw new Error(result.error);
+
+        // 3. 데이터 렌더링 (코코포리아 API 구조에 맞춤)
+        const messages = result.data.messages;
+        contentEl.innerHTML = "";
+        
+        messages.forEach(msg => {
+            const div = document.createElement('div');
+            div.className = 'msg-card';
+            div.innerHTML = `
+                <div class="avatar">${msg.name ? msg.name[0] : '?'}</div>
+                <div class="msg-content">
+                    <div class="msg-header"><strong>${msg.name}</strong></div>
+                    <div class="text">${msg.body.replace(/\n/g, '<br>')}</div>
+                </div>
+            `;
+            contentEl.appendChild(div);
+        });
+        
+        statusEl.innerText = `${messages.length}개의 로그를 성공적으로 가져왔습니다.`;
+
+    } catch (error) {
+        statusEl.innerText = "오류: " + error.message;
+        console.error(error);
+    }
+}
 </script>
 
 </html>
