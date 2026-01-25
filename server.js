@@ -2,52 +2,59 @@ const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
 const app = express();
-const userAgents = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0',
-    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1'
-];
 
+// 모든 도메인에서의 접속을 허용합니다. (GitHub Pages 연동용)
 app.use(cors());
 
 app.get('/proxy/:roomId', async (req, res) => {
     const { roomId } = req.params;
-    
-    // 무작위 User-Agent 선택
-    const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
+
+    // 서버 깨우기 확인용 테스트 경로
+    if (roomId === 'test') return res.json({ status: 'ok' });
+
+    const targetUrl = `https://ccfolia.com/api/room/${roomId}`;
 
     try {
-        const response = await axios.get(`https://ccfolia.com/api/room/${roomId}`, {
+        const response = await axios.get(targetUrl, {
             headers: {
-                'User-Agent': randomUA,
-                'Accept': 'application/json',
-                'Referer': 'https://ccfolia.com/',
-                // 아래 항목을 추가하면 더 효과적입니다.
+                // 실제 브라우저인 것처럼 속이는 핵심 헤더 세트
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'application/json, text/plain, */*',
+                'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Referer': `https://ccfolia.com/rooms/${roomId}`,
+                'Origin': 'https://ccfolia.com',
+                
+                // Sec- 계열 헤더: 최신 크롬 보안 검사 우회용
+                'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                'Sec-Ch-Ua-Mobile': '?0',
+                'Sec-Ch-Ua-Platform': '"Windows"',
+                'Sec-Fetch-Dest': 'empty',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'same-origin',
+                
                 'Cache-Control': 'no-cache',
                 'Pragma': 'no-cache'
-            }
+            },
+            timeout: 10000 // 10초 내 응답 없으면 타임아웃
         });
-        
-        // 코코포리아 API는 성공 시 { data: { ... } } 구조를 가집니다.
+
+        // 성공적으로 JSON 데이터를 받았을 경우
         if (response.data && response.data.data) {
             res.json(response.data);
         } else {
-            // 응답은 왔으나 데이터가 비어있는 경우
-            res.status(404).json({ error: "방이 비공개이거나 삭제되었습니다." });
+            res.status(404).json({ error: "데이터 형식이 올바르지 않거나 방이 비공개입니다." });
         }
     } catch (error) {
-        console.error("Fetch Error:", error.response ? error.response.status : error.message);
+        console.error("Fetch Error:", error.message);
         
-        // 403이나 404 에러 시 사용자에게 알림
-        if (error.response && error.response.status === 403) {
-            res.status(403).json({ error: "코코포리아가 접근을 차단했습니다. 잠시 후 다시 시도하세요." });
+        // 코코포리아가 차단(HTML 응답)을 보냈을 때의 처리
+        if (error.response && typeof error.response.data === 'string' && error.response.data.includes('<!doctype html>')) {
+            res.status(403).json({ error: "코코포리아가 서버 접근을 거부했습니다. (봇 방어 작동)" });
         } else {
-            res.status(500).json({ error: "서버 응답 오류 (방 ID를 확인해주세요)" });
+            res.status(500).json({ error: "코코포리아 서버에 연결할 수 없습니다." });
         }
     }
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
