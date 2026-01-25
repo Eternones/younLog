@@ -3,27 +3,36 @@ const axios = require('axios');
 const cors = require('cors');
 const app = express();
 
-// 모든 접속을 허용하거나, 내 GitHub Pages 주소만 허용하도록 설정합니다.
-app.use(cors()); 
+app.use(cors());
 
 app.get('/proxy/:roomId', async (req, res) => {
     const { roomId } = req.params;
+    
+    // 테스트용 경로 처리
+    if (roomId === 'test') return res.json({ status: 'ok' });
+
     const targetUrl = `https://ccfolia.com/api/room/${roomId}`;
 
     try {
         const response = await axios.get(targetUrl, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Referer': 'https://ccfolia.com/',
-                'Origin': 'https://ccfolia.com'
+                'Accept': 'application/json',
+                'Referer': 'https://ccfolia.com/'
             }
         });
-        res.json(response.data);
+        
+        // 데이터 구조가 올바른지 확인 후 전송
+        if (response.data && response.data.data) {
+            res.json(response.data);
+        } else {
+            res.status(404).json({ error: "방 정보를 찾을 수 없거나 비공개 상태입니다." });
+        }
     } catch (error) {
-        console.error("Error fetching data:", error.message);
-        res.status(500).json({ error: "코코포리아에서 데이터를 가져오지 못했습니다." });
+        console.error("Fetch Error:", error.message);
+        res.status(500).json({ error: "코코포리아 서버 응답 오류" });
     }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
