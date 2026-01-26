@@ -44,7 +44,6 @@ app.post('/extract', async (req, res) => {
             return Array.from(items).map(item => {
                 const nameElement = item.querySelector('h6');
                 const messageElement = item.querySelector('p');
-                // 이미지 태그를 찾아 src 주소를 가져옵니다.
                 const imageElement = item.querySelector('img');
 
                 if (nameElement && messageElement) {
@@ -52,16 +51,20 @@ app.post('/extract', async (req, res) => {
                     const message = messageElement.innerText.trim();
                     const imageUrl = imageElement ? imageElement.src : null;
 
+                    // [추가] 메시지 요소의 글자색을 가져옵니다.
+                    const color = window.getComputedStyle(messageElement).color;
+
                     return {
                         name: name,
                         message: message,
-                        image: imageUrl // 이미지 주소 추가
+                        image: imageUrl,
+                        color: color // 색상 데이터 추가 (예: "rgb(255, 0, 0)")
                     };
                 }
                 return null;
             }).filter(log => log !== null);
         });
-
+        
         res.json({ success: true, logs: chatLogs });
     } catch (error) {
         console.error(error);
