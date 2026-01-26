@@ -24,8 +24,8 @@
         <div>
             <div>
                 <p class="content-head">로그 링크</p>
-                <input id="roomUrl" placeholder="https://ccfolia.com/rooms/...">
-                <button id="fetchBtn" onclick="loadCocofoliaLogs()">백업</button>
+                <input id="urlInput" placeholder="https://ccfolia.com/rooms/...">
+                <button onclick="startExtraction()">확인</button>
             </div>
             <div>
                 <p class="content-head">시스템 캐릭터 지정</p>
@@ -46,13 +46,9 @@
         </div>
         <div>
             <div>
-                <div id="log"></div>
+                <div id="result"></div>
             </div>
         </div>
-    </div>
-
-    <div id="status" style="text-align: center; background: #222; color: #eee; padding: 5px; font-size: 0.9rem;">
-        🟡 서버 확인 중...
     </div>
 
     <div id="footer">
@@ -61,152 +57,37 @@
 </body>
 
 <script>
-    // 1. 본인의 Render 서버 주소로 꼭 수정하세요!
-    const PROXY_SERVER = "https://younLog-1.onrender.com";
-
-    const statusEl = document.getElementById('status');
-    const fetchBtn = document.getElementById('fetchBtn');
-
-    // 페이지 로드 시 서버 깨우기 (Warm-up)
-    window.addEventListener('DOMContentLoaded', async () => {
-        statusEl.innerHTML = "🟡 서버 상태 확인 중...";
-        fetchBtn.disabled = true;
-
-        try {
-            // 서버에 가벼운 요청을 보냄
-            const start = Date.now();
-            await fetch(`${PROXY_SERVER}/proxy/test`); // 존재하지 않는 ID라도 요청 자체가 서버를 깨움
-
-            statusEl.innerHTML = "🟢 서버 온라인 (준비 완료)";
-            fetchBtn.disabled = false;
-        } catch (e) {
-            // 서버가 잠들어 있으면 응답에 시간이 걸립니다.
-            statusEl.innerHTML = "⏳ 서버가 잠들어 있습니다. 깨우는 중... (최대 1분 소요)";
-
-            // 5초마다 재시도하는 로직
-            const retry = setInterval(async () => {
-                try {
-                    await fetch(`${PROXY_SERVER}/proxy/test`);
-                    statusEl.innerHTML = "🟢 서버가 방금 깨어났습니다!";
-                    fetchBtn.disabled = false;
-                    clearInterval(retry);
-                } catch (err) { console.log("Waking up..."); }
-            }, 5000);
-        }
-    });
-
-    async function loadCocofoliaLogs() {
-        const urlInput = document.getElementById('roomUrl').value;
-        const roomId = urlInput.split('/').pop();
-
-        if (!roomId) return alert("URL을 입력해주세요.");
-
-        const statusEl = document.getElementById('status');
-        const logContainer = document.getElementById('log-container'); // 혹은 본인의 로그 출력 영역 ID
-
-        statusEl.innerText = "🚀 로그 추출 중...";
-
-        try {
-            const response = await fetch(`${PROXY_SERVER}/proxy/${roomId}`);
-            const result = await response.json();
-
-            // 1. 서버 에러 응답 처리
-            if (result.error) throw new Error(result.error);
-
-            // 2. 데이터 존재 여부 확인 (핵심 해결책)
-            if (!result.data || !result.data.messages) {
-                throw new Error("가져올 수 있는 메시지가 없습니다. 방 설정을 확인해주세요.");
-            }
-
-            renderLogs(result.data.messages);
-            statusEl.innerText = `✅ ${result.data.messages.length}개의 로그를 가져왔습니다.`;
-
-        } catch (error) {
-            statusEl.innerText = "❌ 오류: " + error.message;
-            console.error("Detailed Error:", error);
-        }
-    }
-
-    function renderLogs(messages) {
-        const contentEl = document.getElementById('content');
-        contentEl.innerHTML = "";
-        messages.forEach(msg => {
-            const div = document.createElement('div');
-            div.className = 'msg-card';
-            div.innerHTML = `
-            <div class="avatar" style="background:#444; color:white; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-right:10px;">
-                ${msg.name ? msg.name[0] : '?'}
-            </div>
-            <div>
-                <strong>${msg.name}</strong><br>
-                <span>${msg.body.replace(/\n/g, '<br>')}</span>
-            </div>
-        `;
-            div.style.display = "flex";
-            div.style.marginBottom = "15px";
-            contentEl.appendChild(div);
-        });
-    }
-    /* window.addEventListener('DOMContentLoaded', () => {
-        const PROXY_SERVER = "https://본인의-서비스-이름.onrender.com";
-        const statusEl = document.getElementById('status');
-
-        statusEl.innerText = "서버를 깨우는 중입니다. 잠시만 기다려 주세요...";
-
-        // 서버의 루트(/)나 특정 헬스체크 경로에 요청을 보냄
-        fetch(`${PROXY_SERVER}/`)
-            .then(() => {
-                statusEl.innerText = "서버가 준비되었습니다! URL을 입력해주세요.";
-                console.log("Server is awake!");
-            })
-            .catch(() => {
-                // 처음엔 서버가 잠들어 있어 에러가 날 수 있지만, 요청 자체로 잠은 깹니다.
-                console.log("Server is waking up...");
-            });
-        async function loadCocofoliaLogs() {
-            const urlInput = document.getElementById('roomUrl').value;
-            const roomId = urlInput.split('/').pop();
-
-            // 1. Render에서 받은 본인의 서버 주소로 변경하세요.
-            const PROXY_SERVER = "https://본인의-서비스-이름.onrender.com";
-
-            const statusEl = document.getElementById('status');
-            const contentEl = document.getElementById('content');
-
-            statusEl.innerText = "서버에서 로그를 가져오는 중...";
+    async function startExtraction() {
+            const url = document.getElementById('urlInput').value;
+            const resultDiv = document.getElementById('result');
+            
+            resultDiv.innerText = "서버에서 데이터를 긁어오는 중입니다... (최대 1분 소요)";
 
             try {
-                // 2. 내 중계 서버 호출
-                const response = await fetch(`${PROXY_SERVER}/proxy/${roomId}`);
-                const result = await response.json();
-
-                if (result.error) throw new Error(result.error);
-
-                // 3. 데이터 렌더링 (코코포리아 API 구조에 맞춤)
-                const messages = result.data.messages;
-                contentEl.innerHTML = "";
-
-                messages.forEach(msg => {
-                    const div = document.createElement('div');
-                    div.className = 'msg-card';
-                    div.innerHTML = `
-                <div class="avatar">${msg.name ? msg.name[0] : '?'}</div>
-                <div class="msg-content">
-                    <div class="msg-header"><strong>${msg.name}</strong></div>
-                    <div class="text">${msg.body.replace(/\n/g, '<br>')}</div>
-                </div>
-            `;
-                    contentEl.appendChild(div);
+                // Render에 배포한 서버 주소로 변경하세요.
+                const response = await fetch('https://your-render-app-name.onrender.com/extract', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url })
                 });
 
-                statusEl.innerText = `${messages.length}개의 로그를 성공적으로 가져왔습니다.`;
-
-            } catch (error) {
-                statusEl.innerText = "오류: " + error.message;
-                console.error(error);
+                const data = await response.json();
+                if (data.success) {
+                    // 추출된 HTML을 화면에 렌더링하거나 텍스트로 표시
+                    resultDiv.innerHTML = `<h3>추출 완료!</h3><pre>${escapeHtml(data.html)}</pre>`;
+                } else {
+                    resultDiv.innerText = "에러 발생: " + data.error;
+                }
+            } catch (err) {
+                resultDiv.innerText = "서버 연결 실패. Render 서버가 깨어나는 중일 수 있습니다.";
             }
         }
-    });    */
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
 </script>
 
 </html>
