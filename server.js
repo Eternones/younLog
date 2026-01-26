@@ -17,12 +17,17 @@ app.post('/extract', async (req, res) => {
     try {
         // Render 환경을 위한 Puppeteer 설정
         browser = await puppeteer.launch({
-            headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            headless: true, // 또는 'new'
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage', // 메모리 부족 방지
+                '--single-process'         // 리소스 절약
+            ]
         });
 
         const page = await browser.newPage();
-        
+
         // HSTS 대응: HTTPS 접속 및 데이터 로딩 대기
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
 
@@ -32,7 +37,7 @@ app.post('/extract', async (req, res) => {
         // 데이터 추출
         const htmlContent = await page.evaluate(() => {
             // 채팅 로그 영역만 떼어내거나 전체를 가져올 수 있습니다.
-            return document.body.innerHTML; 
+            return document.body.innerHTML;
         });
 
         res.json({ success: true, html: htmlContent });
