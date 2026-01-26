@@ -72,15 +72,17 @@
 
             const data = await response.json();
 
-            if (data.success) {
-                // 핵심 수정 부분: data.html 대신 서버에서 보낸 data.logs(배열)를 사용합니다.
-                // 배열의 각 줄을 합쳐서 하나의 텍스트로 만듭니다.
-                const formattedLogs = data.logs ? data.logs.join('\n') : "추출된 로그가 없습니다.";
-
-                resultDiv.innerHTML = `<h3>추출 완료!</h3><pre>${escapeHtml(formattedLogs)}</pre>`;
+            if (data.success && data.logs) {
+                // [핵심 수정] 객체 배열을 읽기 좋은 텍스트로 변환합니다.
+                const htmlContent = data.logs.map(log => `
+    <div style="margin-bottom: 10px;">
+        <strong>${escapeHtml(log.name)}</strong>: ${escapeHtml(log.message)}
+        ${log.image ? `<br><img src="${log.image}" style="max-width: 200px;">` : ''}
+    </div>
+`).join('');
+                resultDiv.innerHTML = `<h3>추출 완료!</h3><div>${htmlContent}</div>`;
             } else {
-                // 에러 메시지 출력
-                resultDiv.innerText = "에러 발생: " + (data.error || data.message);
+                resultDiv.innerText = "에러 발생: " + (data.error || "데이터를 찾을 수 없습니다.");
             }
         } catch (err) {
             resultDiv.innerText = "서버 연결 실패. Render 서버가 깨어나는 중일 수 있습니다.";
