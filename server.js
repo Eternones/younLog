@@ -3,6 +3,7 @@ const puppeteer = require('puppeteer');
 const cors = require('cors');
 const app = express();
 
+
 app.use(cors()); // GitHub Pages에서 접근할 수 있도록 허용
 app.use(express.json());
 
@@ -16,13 +17,16 @@ app.post('/extract', async (req, res) => {
     let browser;
     try {
         // Render 환경을 위한 Puppeteer 설정
-        browser = await puppeteer.launch({
-            headless: true, // 또는 'new'
+        const browser = await puppeteer.launch({
+            headless: true,
+            // 환경 변수에 설정한 경로를 가져오거나, 없으면 기본 경로를 사용
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath(),
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage', // 메모리 부족 방지
-                '--single-process'         // 리소스 절약
+                '--disable-dev-shm-usage',
+                '--single-process',
+                '--no-zygote'
             ]
         });
 
