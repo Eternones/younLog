@@ -58,36 +58,40 @@
 
 <script>
     async function startExtraction() {
-            const url = document.getElementById('urlInput').value;
-            const resultDiv = document.getElementById('result');
-            
-            resultDiv.innerText = "서버에서 데이터를 긁어오는 중입니다... (최대 1분 소요)";
+        const url = document.getElementById('urlInput').value;
+        const resultDiv = document.getElementById('result');
 
-            try {
-                // Render에 배포한 서버 주소로 변경하세요.
-                const response = await fetch('https://younLog-1.onrender.com/extract', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: url })
-                });
+        resultDiv.innerText = "서버에서 데이터를 긁어오는 중입니다... (최대 1분 소요)";
 
-                const data = await response.json();
-                if (data.success) {
-                    // 추출된 HTML을 화면에 렌더링하거나 텍스트로 표시
-                    resultDiv.innerHTML = `<h3>추출 완료!</h3><pre>${escapeHtml(data.html)}</pre>`;
-                } else {
-                    resultDiv.innerText = "에러 발생: " + data.error;
-                }
-            } catch (err) {
-                resultDiv.innerText = "서버 연결 실패. Render 서버가 깨어나는 중일 수 있습니다.";
+        try {
+            const response = await fetch('https://younlog-1.onrender.com/extract', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: url })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                // 핵심 수정 부분: data.html 대신 서버에서 보낸 data.logs(배열)를 사용합니다.
+                // 배열의 각 줄을 합쳐서 하나의 텍스트로 만듭니다.
+                const formattedLogs = data.logs ? data.logs.join('\n') : "추출된 로그가 없습니다.";
+
+                resultDiv.innerHTML = `<h3>추출 완료!</h3><pre>${escapeHtml(formattedLogs)}</pre>`;
+            } else {
+                // 에러 메시지 출력
+                resultDiv.innerText = "에러 발생: " + (data.error || data.message);
             }
+        } catch (err) {
+            resultDiv.innerText = "서버 연결 실패. Render 서버가 깨어나는 중일 수 있습니다.";
         }
+    }
 
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
 </script>
 
 </html>
