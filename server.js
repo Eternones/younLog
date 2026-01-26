@@ -51,20 +51,20 @@ app.post('/extract', async (req, res) => {
                     const message = messageElement.innerText.trim();
                     const imageUrl = imageElement ? imageElement.src : null;
 
-                    // [추가] 메시지 요소의 글자색을 가져옵니다.
-                    const color = window.getComputedStyle(messageElement).color;
+                    // [수정] h6(이름) 요소의 글자색을 정확히 가져옵니다.
+                    const nameColor = window.getComputedStyle(nameElement).color;
 
                     return {
                         name: name,
                         message: message,
                         image: imageUrl,
-                        color: color // 색상 데이터 추가 (예: "rgb(255, 0, 0)")
+                        nameColor: nameColor // 이름 색상만 별도로 저장
                     };
                 }
                 return null;
             }).filter(log => log !== null);
         });
-        
+
         res.json({ success: true, logs: chatLogs });
     } catch (error) {
         console.error(error);
