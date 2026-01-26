@@ -30,11 +30,11 @@ app.post('/extract', async (req, res) => {
         });
 
         const page = await browser.newPage();
-        
+
         // 1. 페이지 접속 (타임아웃 넉넉히 2분)
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });
 
-        const chatContainerSelector = '.MuiList-root'; 
+        const chatContainerSelector = '.MuiList-root';
 
         // 2. 채팅창 요소 대기
         await page.waitForSelector(chatContainerSelector, { timeout: 30000 }).catch(() => {
@@ -42,33 +42,46 @@ app.post('/extract', async (req, res) => {
         });
 
         // 3. 모든 로그를 불러오기 위해 가장 위로 스크롤 (개선된 단일 로직)
+        // 3. 모든 로그를 불러오기 위해 가장 위로 스크롤 (강화된 로직)
         await page.evaluate(async (selector) => {
             const container = document.querySelector(selector)?.parentElement;
             if (!container) return;
 
             await new Promise((resolve) => {
-                let previousHeight = 0;
+                let lastHeight = document.querySelectorAll('.MuiListItem-root').length;
                 let retryCount = 0;
-                const maxRetries = 5; 
+                const maxRetries = 10; // 데이터가 안 늘어나도 10번(약 8초)은 더 시도해봄
 
                 const timer = setInterval(() => {
-                    container.scrollBy(0, -1200); // 위로 스크롤
+                    // 1. 위로 스크롤
+                    container.scrollBy(0, -1500);
 
+                    // 2. 현재 로드된 채팅 아이템 개수 확인
                     const currentHeight = document.querySelectorAll('.MuiListItem-root').length;
 
+                    // 3. 맨 위(scrollTop 0)에 도달했는지 확인
                     if (container.scrollTop === 0) {
-                        if (currentHeight === previousHeight) {
+                        if (currentHeight === lastHeight) {
+                            // 맨 위인데 개수가 그대로라면 '로딩 대기' 모드 진입
                             retryCount++;
+                            console.log(`데이터 로딩 대기 중... (${retryCount}/${maxRetries})`);
+
                             if (retryCount >= maxRetries) {
+                                // 충분히 기다렸는데도 변화가 없으면 진짜 끝으로 간주
                                 clearInterval(timer);
                                 resolve();
                             }
                         } else {
+                            // 데이터가 늘어났다면 로딩 성공! 다시 카운트 초기화하고 계속 올라감
                             retryCount = 0;
                         }
+                    } else {
+                        // 아직 맨 위가 아니면 계속 스크롤 (이때도 카운트 초기화)
+                        retryCount = 0;
                     }
-                    previousHeight = currentHeight;
-                }, 500); 
+
+                    lastHeight = currentHeight;
+                }, 800); // 0.8초마다 한 번씩 스크롤 (로딩 시간을 넉넉히 줌)
             });
         }, chatContainerSelector);
 
