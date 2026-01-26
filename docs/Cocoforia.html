@@ -76,7 +76,7 @@
                 // [핵심 수정] 객체 배열을 읽기 좋은 텍스트로 변환합니다.
                 const htmlContent = data.logs.map(log => `
     <div style="margin-bottom: 10px; line-height: 1.6;">
-        <strong style="color: #333;">${escapeHtml(log.name)}</strong>: 
+        <strong style="color: ${log.color};">${escapeHtml(log.name)}</strong>: 
         <span style="color: ${log.color || 'black'};">
             ${escapeHtml(log.message)}
         </span>
