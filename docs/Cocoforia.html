@@ -76,13 +76,13 @@
                 // [핵심 수정] 객체 배열을 읽기 좋은 텍스트로 변환합니다.
                 // index.html의 startExtraction 함수 내 htmlContent 부분
                 const htmlContent = data.logs.map(log => `
-                <div style="margin-bottom: 12px; font-family: sans-serif;">
-                ${log.image ? `<br><img src="${log.image}" style="max-width: 200px; max-height: 200px; border-radius: 5px;">` : ''}
+                <div style="margin: 5px; display: flex; font-family: sans-serif;">
+                ${log.image ? `<br><img src="${log.image}" style="width: 50px; height: 50px; object-fit: cover; object-position: top; border-radius: 5px; background-color: rgba(0, 0, 0, 0.1)">` : ''}<div>
                 <strong style="color: ${log.nameColor}; font-size: 1.1em;">
                 ${escapeHtml(log.name)}
                 </strong>
-                <span style="color: #333; margin-left: 5px;">: ${escapeHtml(log.message)}</span>
-        
+                <div style="color: #333; padding: 0px 5px;">${escapeHtml(log.message)}</div>
+                </div>
                 
                 </div>
                 `).join('');
