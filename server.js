@@ -16,20 +16,16 @@ app.post('/extract', async (req, res) => {
 
     let browser;
     try {
-        // server.js 수정본
+        // server.js의 puppeteer.launch 부분
         const browser = await puppeteer.launch({
-            headless: true, // 혹은 'new'
-            // Docker 환경에서 크롬이 설치되는 표준 경로들을 순서대로 확인합니다.
-            executablePath:
-                process.env.PUPPETEER_EXECUTABLE_PATH ||
-                '/usr/bin/google-chrome' ||
-                '/usr/bin/google-chrome-stable',
+            headless: true, // 또는 'new'
+            // executablePath 항목을 아예 삭제하거나 아래처럼 puppeteer.executablePath()를 사용하세요.
+            executablePath: puppeteer.executablePath(),
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
-                '--single-process',
-                '--no-zygote'
+                '--single-process'
             ]
         });
 
