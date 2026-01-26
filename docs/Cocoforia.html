@@ -77,11 +77,10 @@
                 // index.html의 startExtraction 함수 내 htmlContent 부분
                 const htmlContent = data.logs.map(log => `
                 <div style="margin: 5px; display: flex; font-family: sans-serif;">
-                ${log.image ? `<br><img src="${log.image}" style="width: 50px; height: 50px; object-fit: cover; object-position: top; border-radius: 5px; background-color: rgba(0, 0, 0, 0.1)">` : ''}<div>
+                ${log.image ? `<br><img src="${log.image}" style="width: 50px; height: 50px; min-width: 50px; min-height: 50px; object-fit: cover; object-position: top; border-radius: 5px; background-color: rgba(0, 0, 0, 0.1)">` : ''}<div style="padding: 0px 5px;">
                 <strong style="color: ${log.nameColor}; font-size: 1.1em;">
-                ${escapeHtml(log.name)}
-                </strong>
-                <div style="color: #333; padding: 0px 5px;">${escapeHtml(log.message)}</div>
+                ${escapeHtml(log.name)}</strong>
+                <div style="color: #333; padding: 0px;">${escapeHtml(log.message)}</div>
                 </div>
                 
                 </div>
