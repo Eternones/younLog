@@ -37,24 +37,31 @@ app.post('/extract', async (req, res) => {
         // Firebase 데이터(로그 요소)가 나타날 때까지 대기
         await page.waitForSelector('div[data-index]', { timeout: 30000 });
 
-        // 데이터 추출
         // server.js 의 추출 로직 부분 수정
         const chatLogs = await page.evaluate(() => {
-            // 채팅 아이템들을 모두 가져옵니다.
             const items = document.querySelectorAll('.MuiListItem-root');
-            return Array.from(items).map(item => {
-                const name = item.querySelector('h6')?.innerText.split('-')[0].trim();
-                const message = item.querySelector('p')?.innerText.trim();
-                const time = item.querySelector('span.MuiTypography-caption')?.innerText.replace('- ', '').trim();
 
-                if (name && message) {
-                    return `[${time || ''}] ${name}: ${message}`;
+            return Array.from(items).map(item => {
+                const nameElement = item.querySelector('h6');
+                const messageElement = item.querySelector('p');
+                // 이미지 태그를 찾아 src 주소를 가져옵니다.
+                const imageElement = item.querySelector('img');
+
+                if (nameElement && messageElement) {
+                    const name = nameElement.innerText.split('-')[0].trim();
+                    const message = messageElement.innerText.trim();
+                    const imageUrl = imageElement ? imageElement.src : null;
+
+                    return {
+                        name: name,
+                        message: message,
+                        image: imageUrl // 이미지 주소 추가
+                    };
                 }
                 return null;
             }).filter(log => log !== null);
         });
 
-        // 클라이언트에 결과 전송
         res.json({ success: true, logs: chatLogs });
     } catch (error) {
         console.error(error);
