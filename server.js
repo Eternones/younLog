@@ -16,16 +16,20 @@ app.post('/extract', async (req, res) => {
 
     let browser;
     try {
-        // server.js의 puppeteer.launch 부분
+        // server.js 수정본
         const browser = await puppeteer.launch({
-            headless: true,
-            // Docker 이미지 내부에 설치된 크롬 경로 (이 경로는 고정입니다)
-            executablePath: '/usr/bin/google-chrome',
+            headless: true, // 혹은 'new'
+            // Docker 환경에서 크롬이 설치되는 표준 경로들을 순서대로 확인합니다.
+            executablePath:
+                process.env.PUPPETEER_EXECUTABLE_PATH ||
+                '/usr/bin/google-chrome' ||
+                '/usr/bin/google-chrome-stable',
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
-                '--single-process'
+                '--single-process',
+                '--no-zygote'
             ]
         });
 
@@ -52,5 +56,5 @@ app.post('/extract', async (req, res) => {
     }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const PORT = process.env.PORT || 10000; // Render는 10000 포트를 기본으로 씁니다.
+app.listen(PORT, '0.0.0.0', () => console.log(`Server is running on port ${PORT}`));
