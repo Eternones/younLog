@@ -38,12 +38,24 @@ app.post('/extract', async (req, res) => {
         await page.waitForSelector('div[data-index]', { timeout: 30000 });
 
         // 데이터 추출
-        const htmlContent = await page.evaluate(() => {
-            // 채팅 로그 영역만 떼어내거나 전체를 가져올 수 있습니다.
-            return document.body.innerHTML;
+        // server.js 의 추출 로직 부분 수정
+        const chatLogs = await page.evaluate(() => {
+            // 채팅 아이템들을 모두 가져옵니다.
+            const items = document.querySelectorAll('.MuiListItem-root');
+            return Array.from(items).map(item => {
+                const name = item.querySelector('h6')?.innerText.split('-')[0].trim();
+                const message = item.querySelector('p')?.innerText.trim();
+                const time = item.querySelector('span.MuiTypography-caption')?.innerText.replace('- ', '').trim();
+
+                if (name && message) {
+                    return `[${time || ''}] ${name}: ${message}`;
+                }
+                return null;
+            }).filter(log => log !== null);
         });
 
-        res.json({ success: true, html: htmlContent });
+        // 클라이언트에 결과 전송
+        res.json({ success: true, logs: chatLogs });
     } catch (error) {
         console.error(error);
         res.status(500).json({ success: false, error: error.message });
