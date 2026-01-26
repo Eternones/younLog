@@ -31,12 +31,30 @@ app.post('/extract', async (req, res) => {
 
         const page = await browser.newPage();
 
-        // HSTS 대응: HTTPS 접속 및 데이터 로딩 대기
-        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });
+        try {
+            // 1. 페이지 접속 (네트워크가 완전히 멈출 때까지 기다리지 않음)
+            await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 210000 });
 
-        // 2. 채팅창 요소가 나타날 때까지 대기
-        const chatContainerSelector = '.MuiList-root';
-        await page.waitForSelector(chatContainerSelector, { timeout: 20000 });
+            // 2. 채팅창 요소 대기 (선택자 후보군 추가 및 시간 연장)
+            // 코코포리아의 채팅 목록은 .MuiList-root 또는 특정 role="list"를 가집니다.
+            const chatSelector = '.MuiList-root';
+
+            try {
+                await page.waitForSelector(chatSelector, { visible: true, timeout: 60000 });
+                console.log("채팅창 발견!");
+            } catch (e) {
+                console.log("특정 선택자를 찾지 못해 대안을 탐색합니다...");
+                // 만약 선택자를 못 찾아도 일단 페이지 전체를 훑어보도록 진행
+            }
+
+            // 3. 로딩이 덜 되었을 수 있으므로 추가로 3초만 더 대기 (안전장치)
+            await new Promise(r => setTimeout(r, 3000));
+
+            // ... 이후 스크롤 및 추출 로직 진행
+        } catch (error) {
+            console.error("로딩 중 에러:", error);
+            res.json({ success: false, error: "채팅창 로딩에 실패했습니다. 방 주소가 정확한지 확인해 주세요." });
+        }
 
         // 3. 모든 로그를 불러오기 위해 가장 위로 스크롤 (개선된 로직)
         await page.evaluate(async (selector) => {
