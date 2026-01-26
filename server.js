@@ -32,7 +32,7 @@ app.post('/extract', async (req, res) => {
         const page = await browser.newPage();
 
         // HSTS 대응: HTTPS 접속 및 데이터 로딩 대기
-        await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 });
 
         // Firebase 데이터(로그 요소)가 나타날 때까지 대기
         await page.waitForSelector('div[data-index]', { timeout: 30000 });
