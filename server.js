@@ -6,7 +6,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 서버 깨우기용 경로
 app.get('/', (req, res) => res.send('Server is awake!'));
 
 app.post('/extract', async (req, res) => {
@@ -20,96 +19,114 @@ app.post('/extract', async (req, res) => {
         browser = await puppeteer.launch({
             headless: "new",
             executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath(),
+            // [중요] 프로토콜 타임아웃을 해제(0)하거나 아주 길게 설정
+            protocolTimeout: 0,
             args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
         });
 
         const page = await browser.newPage();
+        // 전체 작업 타임아웃 해제 (무제한)
+        page.setDefaultTimeout(0);
 
-        // 타임아웃을 10분(600000ms)으로 설정하여 수만 줄 로딩 견디기
-        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 600000 });
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });
 
         const chatContainerSelector = '.MuiList-root';
         await page.waitForSelector(chatContainerSelector, { timeout: 60000 }).catch(() => console.log("진행함"));
 
-        // [핵심] 덩어리 수집 및 정렬 로직 수정
-        const chatLogs = await page.evaluate(async (selector) => {
-            const list = document.querySelector(selector);
-            let scrollBox = list;
-            // 스크롤 가능한 부모 찾기
-            while (scrollBox) {
-                const style = window.getComputedStyle(scrollBox);
-                if (style.overflowY === 'auto' || style.overflowY === 'scroll') break;
-                scrollBox = scrollBox.parentElement;
+        // === [최적화된 로직 시작] ===
+        // 브라우저 내부가 아니라 Node.js에서 루프를 제어합니다.
+
+        const allLogsMap = new Map(); // 전체 로그 저장소 (Node.js 메모리)
+        let isFinished = false;
+        let noChangeCount = 0;
+        const maxRetries = 30; // 멈춘 상태에서 약 30초 대기
+
+        while (!isFinished) {
+            // 1. 브라우저에게 "현재 화면 긁고 스크롤 올려" 명령 (짧게 실행됨)
+            const result = await page.evaluate((selector) => {
+                const list = document.querySelector(selector);
+                let scrollBox = list;
+                while (scrollBox) {
+                    const style = window.getComputedStyle(scrollBox);
+                    if (style.overflowY === 'auto' || style.overflowY === 'scroll') break;
+                    scrollBox = scrollBox.parentElement;
+                }
+                if (!scrollBox) scrollBox = list?.parentElement;
+
+                // 데이터 수집
+                const items = document.querySelectorAll('.MuiListItem-root');
+                const chunk = [];
+                items.forEach(item => {
+                    const nameEl = item.querySelector('h6');
+                    const msgEl = item.querySelector('p');
+                    const imgEl = item.querySelector('img');
+
+                    if (nameEl && msgEl) {
+                        chunk.push({
+                            name: nameEl.innerText.trim(),
+                            message: msgEl.innerText.trim(),
+                            image: imgEl ? imgEl.src : null,
+                            nameColor: window.getComputedStyle(nameEl).color
+                        });
+                    }
+                });
+
+                // 스크롤 올리기
+                const prevScrollTop = scrollBox.scrollTop;
+                scrollBox.scrollBy(0, -2000);
+
+                return {
+                    chunk,
+                    scrollTop: scrollBox.scrollTop,
+                    isTop: scrollBox.scrollTop === 0
+                };
+            }, chatContainerSelector);
+
+            // 2. 받아온 데이터를 Node.js의 Map에 저장 (중복 제거)
+            let newLogAdded = false;
+            // 역순으로 훑어서 저장 (최신 -> 과거 순으로 들어오므로)
+            for (const log of result.chunk) {
+                const key = `${log.name}_${log.message}_${log.image}`;
+                if (!allLogsMap.has(key)) {
+                    allLogsMap.set(key, log);
+                    newLogAdded = true;
+                }
             }
-            if (!scrollBox) scrollBox = list?.parentElement;
 
-            const chunks = []; // 덩어리들을 담을 배열
-            const seenKeys = new Set(); // 중복 방지
+            // 3. 종료 조건 판단
+            // 맨 위에 도달했고, 새로운 데이터도 없다면 카운트 증가
+            if (result.isTop && !newLogAdded) {
+                noChangeCount++;
+                console.log(`수집 대기 중... (${noChangeCount}/${maxRetries})`);
 
-            await new Promise((resolve) => {
-                let sameCount = 0;
-                const maxRetries = 60; // 약 50초 동안 변화 없어도 기다림 (로딩 지연 대응)
+                if (noChangeCount >= maxRetries) {
+                    isFinished = true;
+                }
+            } else {
+                // 데이터가 추가됐거나 아직 스크롤이 남았다면 카운트 리셋
+                if (newLogAdded) noChangeCount = 0;
+                process.stdout.write(`수집 중... 현재 ${allLogsMap.size}개 \r`); // 진행상황 표시
+            }
 
-                const timer = setInterval(() => {
-                    // 1. 현재 화면의 로그들 수집 (위에서 아래로 정방향)
-                    const items = document.querySelectorAll('.MuiListItem-root');
-                    const currentChunk = [];
+            // 4. Node.js 측에서 잠시 대기 (브라우저 과부하 방지 및 로딩 시간 벌기)
+            await new Promise(r => setTimeout(r, 800));
+        }
 
-                    items.forEach(item => {
-                        const nameEl = item.querySelector('h6');
-                        const msgEl = item.querySelector('p');
-                        const imgEl = item.querySelector('img');
+        // 5. 결과 정리
+        // 수집은 [최신 -> 과거] 순으로 섞여서 되었으므로,
+        // Map은 삽입 순서를 유지하되, 우리는 스크롤을 올리며 수집했으므로
+        // 결과적으로 allLogsMap.values()는 [최신 ... 과거]가 섞여있을 수 있음.
+        // 하지만 "덩어리" 단위 처리가 아니라 전체 맵이므로
+        // 단순히 뒤집는 게 아니라, 논리적으로 정렬이 필요할 수 있으나,
+        // 코코포리아 특성상 스크롤 역순 수집이므로 .reverse()가 가장 적합함.
 
-                        if (nameEl && msgEl) {
-                            const name = nameEl.innerText.trim();
-                            const message = msgEl.innerText.trim();
-                            const image = imgEl ? imgEl.src : null;
-                            const nameColor = window.getComputedStyle(nameEl).color;
+        const finalLogs = Array.from(allLogsMap.values()).reverse();
 
-                            const key = `${name}_${message}_${image}`;
-
-                            // 아직 수집하지 않은 새로운 로그만 추가
-                            if (!seenKeys.has(key)) {
-                                seenKeys.add(key);
-                                currentChunk.push({ name, message, image, nameColor });
-                            }
-                        }
-                    });
-
-                    // 이번 스크롤에서 건진 게 있다면 덩어리 보관함에 넣음
-                    if (currentChunk.length > 0) {
-                        chunks.push(currentChunk);
-                        sameCount = 0; // 데이터가 들어왔으니 카운트 리셋
-                    } else {
-                        // 건진 게 없다면(로딩 중이거나 끝에 도달) 카운트 증가
-                        sameCount++;
-                    }
-
-                    // 2. 위로 스크롤 (더 과감하게 이동)
-                    scrollBox.scrollBy(0, -2000);
-
-                    // 3. 종료 조건 체크
-                    // 맨 위(scrollTop 0)에 도달했고, 60번(약 50초) 동안 새 데이터가 안 뜨면 종료
-                    if (scrollBox.scrollTop === 0 && sameCount >= maxRetries) {
-                        clearInterval(timer);
-                        resolve();
-                    }
-                }, 800); // 0.8초 간격
-            });
-
-            // chunks는 [ [최신 로그들], [그다음 과거 로그들], ..., [가장 오래된 로그들] ] 순서로 쌓임
-            // 따라서 덩어리들의 순서만 뒤집으면 [ [가장 오래된], ... , [최신] ]이 됨
-            // *내부 요소(.reverse())는 하지 않음!*
-            chunks.reverse();
-
-            // 하나로 합치기
-            return chunks.flat();
-        }, chatContainerSelector);
-
-        res.json({ success: true, logs: chatLogs });
+        console.log(`총 ${finalLogs.length}개의 로그 추출 완료`);
+        res.json({ success: true, logs: finalLogs });
 
     } catch (error) {
-        console.error(error);
+        console.error("Critical Error:", error);
         res.status(500).json({ success: false, error: error.message });
     } finally {
         if (browser) await browser.close();
