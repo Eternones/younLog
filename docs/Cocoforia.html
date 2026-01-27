@@ -57,46 +57,45 @@
 </body>
 
 <script>
-    // 페이지 로드 시 실행
     window.addEventListener('DOMContentLoaded', () => {
-        wakeUpServer();
-    });
+    wakeUpServer();
+});
 
-    async function wakeUpServer() {
-        const serverUrl = 'https://younlog-1.onrender.com/'; // 본인의 Render 서버 주소
-        const statusText = document.getElementById('result'); // 결과를 보여주는 div 활용
+async function wakeUpServer() {
+    const serverUrl = 'https://younlog-1.onrender.com/';
+    try {
+        await fetch(serverUrl, { mode: 'no-cors' });
+        console.log("서버 깨우기 신호 전송 완료");
+    } catch (err) {
+        console.log("서버 응답 대기 중...");
+    }
+}
 
-        console.log("서버를 깨우는 중...");
+async function startExtraction() {
+    const url = document.getElementById('urlInput').value;
+    const resultDiv = document.getElementById('result');
 
-        try {
-            // 서버에 가벼운 GET 요청을 보냅니다.
-            // 서버가 잠들어 있다면 이 요청을 받고 깨어나기 시작합니다.
-            await fetch(serverUrl, { mode: 'no-cors' });
-            console.log("서버에 신호를 보냈습니다.");
-        } catch (err) {
-            console.log("서버 깨우기 요청 중 오류 발생 (무시 가능)");
-        }
+    if (!url) {
+        alert("코코포리아 주소를 입력해주세요!");
+        return;
     }
 
-    async function startExtraction() {
-        const url = document.getElementById('urlInput').value;
-        const resultDiv = document.getElementById('result');
+    resultDiv.innerText = "데이터베이스에서 로그를 직접 추출 중입니다 (약 1~3초)...";
 
-        resultDiv.innerText = "불러오는 중...";
+    try {
+        // [수정] 엔드포인트를 /extract-direct로 변경
+        const response = await fetch('https://younlog-1.onrender.com/extract-direct', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: url })
+        });
 
-        try {
-            const response = await fetch('https://younlog-1.onrender.com/extract', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: url })
-            });
+        const data = await response.json();
 
-            const data = await response.json();
-
-            if (data.success && data.logs) {
-                // [핵심 수정] 객체 배열을 읽기 좋은 텍스트로 변환합니다.
-                // index.html의 startExtraction 함수 내 htmlContent 부분
-                const htmlContent = data.logs.map(log => `
+        if (data.success && data.logs) {
+            // [핵심] 서버에서 온 순서(과거->최신)대로 화면에 그립니다.
+            // 만약 최신글이 위로 오길 원하시면 data.logs.reverse().map(...)을 사용하세요.
+            const htmlContent = data.logs.map(log => `
                 <div style="margin: 5px; display: flex; font-family: sans-serif;">
                 ${log.image ? `<br><img src="${log.image}" style="width: 50px; height: 50px; min-width: 50px; min-height: 50px; object-fit: cover; object-position: top; border-radius: 5px; background-color: rgba(0, 0, 0, 0.1)">` : ''}<div style="padding: 0px 5px;">
                 <strong style="color: ${log.nameColor}; font-size: 1.1em;">
@@ -106,20 +105,28 @@
                 
                 </div>
                 `).join('');
-                resultDiv.innerHTML = `<div>${htmlContent}</div>`;
-            } else {
-                resultDiv.innerText = "에러 발생: " + (data.error || "데이터를 찾을 수 없습니다.");
-            }
-        } catch (err) {
-            resultDiv.innerText = "서버 연결 실패. Render 서버가 깨어나는 중일 수 있습니다.";
-        }
-    }
 
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+            resultDiv.innerHTML = `
+                <div style="padding: 10px; background: #f9f9f9; border-radius: 10px;">
+                    <p style="color: #666; font-size: 0.8em;">총 ${data.logs.length}개의 메시지 추출 완료</p>
+                    <hr style="border: 0; border-top: 1px solid #eee; margin-bottom: 15px;">
+                    ${htmlContent}
+                </div>
+            `;
+        } else {
+            resultDiv.innerText = "에러: " + (data.error || "데이터를 가져오지 못했습니다.");
+        }
+    } catch (err) {
+        resultDiv.innerText = "서버 연결에 실패했습니다. Render 서버 설정을 확인해주세요.";
     }
+}
+
+function escapeHtml(text) {
+    if (!text) return "";
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
 </script>
 
 </html>

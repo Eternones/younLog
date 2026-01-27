@@ -1,5 +1,4 @@
-import config from "././apikey.js"
-
+const config = require("./apikey.js");
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
@@ -37,7 +36,9 @@ app.post('/extract-direct', async (req, res) => {
                         value: { stringValue: roomId }
                     }
                 },
-                orderBy: [{ field: { fieldPath: "createdAt" }, direction: "ASCENDING" }]
+                orderBy: [{ field: { fieldPath: "createdAt" }, direction: "ASCENDING" },
+                    { field: { fieldPath: "__name__" }, direction: "ASCENDING" }
+                ]
             }
         });
 
