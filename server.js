@@ -41,10 +41,9 @@ app.post('/extract', async (req, res) => {
             console.log("선택자를 찾지 못했지만 진행합니다.");
         });
 
-        // 3 & 4. 실시간 수집 및 스크롤 로직 (수만 줄 대응 끝판왕)
+        // 3 & 4. 실시간 수집 로직 (순서 및 누락 보정)
         const chatLogs = await page.evaluate(async (selector) => {
             const list = document.querySelector(selector);
-            // 실제 스크롤이 발생하는 부모 요소를 찾습니다.
             let scrollBox = list;
             while (scrollBox) {
                 if (window.getComputedStyle(scrollBox).overflowY === 'auto' ||
@@ -53,14 +52,14 @@ app.post('/extract', async (req, res) => {
             }
             if (!scrollBox) scrollBox = list?.parentElement;
 
-            const allLogsMap = new Map(); // 중복 제거를 위한 맵
+            const allLogsMap = new Map();
 
             await new Promise((resolve) => {
                 let sameCount = 0;
-                const maxRetries = 20; // 로딩 대기 횟수 (넉넉히)
+                const maxRetries = 25; // 수만 줄을 위해 대기 횟수 증가
 
                 const timer = setInterval(() => {
-                    // [수집] 현재 화면에 보이는 아이템들을 즉시 맵에 저장 (중복 자동 제거)
+                    // [수집] 아래에서 위로 올라가며 보이는 족족 맵에 담기
                     const items = document.querySelectorAll('.MuiListItem-root');
                     items.forEach(item => {
                         const nameEl = item.querySelector('h6');
@@ -73,39 +72,39 @@ app.post('/extract', async (req, res) => {
                             const image = imgEl ? imgEl.src : null;
                             const nameColor = window.getComputedStyle(nameEl).color;
 
-                            // 이름+메시지+이미지 조합을 키로 사용
+                            // 중복 방지 키 (이름+내용+이미지)
                             const key = `${name}_${message}_${image}`;
                             if (!allLogsMap.has(key)) {
+                                // 맵은 삽입 순서를 기억합니다. (최신 -> 과거 순으로 쌓임)
                                 allLogsMap.set(key, { name, message, image, nameColor });
                             }
                         }
                     });
 
-                    // [스크롤] 맨 위로 강제 이동하여 새 데이터 트리거
-                    const lastCount = allLogsMap.size;
-                    scrollBox.scrollTo(0, 0);
+                    const lastSize = allLogsMap.size;
+                    scrollBox.scrollBy(0, -1200); // 위로 스크롤
 
-                    // [종료 체크] 맨 위에서 데이터가 더 이상 늘어나지 않는지 확인
                     if (scrollBox.scrollTop === 0) {
-                        // 실제 Map의 사이즈가 변했는지로 데이터 추가 여부 판단
-                        if (allLogsMap.size === lastCount) {
+                        if (allLogsMap.size === lastSize) {
                             sameCount++;
                             if (sameCount >= maxRetries) {
                                 clearInterval(timer);
                                 resolve();
                             }
                         } else {
-                            sameCount = 0; // 새 데이터가 들어왔으면 카운트 초기화
+                            sameCount = 0;
                         }
                     }
-                }, 800); // 0.8초 간격으로 반복
+                }, 700); // 0.7초 간격
             });
 
-            // 수집된 Map을 배열로 변환하여 반환
-            return Array.from(allLogsMap.values());
+            // 수집된 데이터를 배열로 변환
+            const finalLogs = Array.from(allLogsMap.values());
+            // 아래(최근)에서 위(과거)로 수집했으므로, 
+            // 원래 시간순(과거 -> 최근)으로 보려면 배열을 뒤집어야 합니다.
+            return finalLogs.reverse();
         }, chatContainerSelector);
 
-        // 결과 응답 (추출 로직이 위에서 끝났으므로 바로 전송)
         res.json({ success: true, logs: chatLogs });
 
     } catch (error) {
