@@ -41,27 +41,25 @@ app.post('/extract', async (req, res) => {
             console.log("선택자를 찾지 못했지만 진행합니다.");
         });
 
-        // 3 & 4. 실시간 수집 로직 (순서 및 누락 보정)
+        // 3 & 4. 스크롤 덩어리 수집 및 역순 재조합 로직
         const chatLogs = await page.evaluate(async (selector) => {
             const list = document.querySelector(selector);
-            let scrollBox = list;
-            while (scrollBox) {
-                if (window.getComputedStyle(scrollBox).overflowY === 'auto' ||
-                    window.getComputedStyle(scrollBox).overflowY === 'scroll') break;
-                scrollBox = scrollBox.parentElement;
-            }
-            if (!scrollBox) scrollBox = list?.parentElement;
+            let scrollBox = list?.closest('.MuiPaper-root') || list?.parentElement;
+            if (!scrollBox) return [];
 
-            const allLogsMap = new Map();
+            const chunks = []; // 각 스크롤 시점의 로그 뭉치들을 담을 배열
+            const seenKeys = new Set(); // 전체 중복 체크용
 
             await new Promise((resolve) => {
                 let sameCount = 0;
-                const maxRetries = 25; // 수만 줄을 위해 대기 횟수 증가
+                const maxRetries = 20;
 
                 const timer = setInterval(() => {
-                    // [수집] 아래에서 위로 올라가며 보이는 족족 맵에 담기
-                    const items = document.querySelectorAll('.MuiListItem-root');
-                    items.forEach(item => {
+                    const currentItems = document.querySelectorAll('.MuiListItem-root');
+                    const currentChunk = [];
+
+                    // 1. 현재 화면에 보이는 로그들을 하나의 덩어리로 수집
+                    currentItems.forEach(item => {
                         const nameEl = item.querySelector('h6');
                         const msgEl = item.querySelector('p');
                         const imgEl = item.querySelector('img');
@@ -72,37 +70,44 @@ app.post('/extract', async (req, res) => {
                             const image = imgEl ? imgEl.src : null;
                             const nameColor = window.getComputedStyle(nameEl).color;
 
-                            // 중복 방지 키 (이름+내용+이미지)
                             const key = `${name}_${message}_${image}`;
-                            if (!allLogsMap.has(key)) {
-                                // 맵은 삽입 순서를 기억합니다. (최신 -> 과거 순으로 쌓임)
-                                allLogsMap.set(key, { name, message, image, nameColor });
+                            // 중복되지 않은 새로운 로그만 이번 덩어리에 추가
+                            if (!seenKeys.has(key)) {
+                                seenKeys.add(key);
+                                currentChunk.push({ name, message, image, nameColor });
                             }
                         }
                     });
 
-                    const lastSize = allLogsMap.size;
-                    scrollBox.scrollBy(0, -1200); // 위로 스크롤
+                    // 이번 스크롤에서 새로 발견된 로그가 있다면 덩어리에 추가
+                    if (currentChunk.length > 0) {
+                        chunks.push(currentChunk);
+                        sameCount = 0; // 데이터가 들어왔으므로 카운트 초기화
+                    }
 
+                    // 2. 위로 스크롤
+                    scrollBox.scrollBy(0, -1200);
+
+                    // 3. 종료 조건 (맨 위 도달 및 데이터 정체)
                     if (scrollBox.scrollTop === 0) {
-                        if (allLogsMap.size === lastSize) {
-                            sameCount++;
-                            if (sameCount >= maxRetries) {
-                                clearInterval(timer);
-                                resolve();
-                            }
-                        } else {
-                            sameCount = 0;
+                        sameCount++;
+                        if (sameCount >= maxRetries) {
+                            clearInterval(timer);
+                            resolve();
                         }
                     }
-                }, 700); // 0.7초 간격
+                }, 800);
             });
 
-            // 수집된 데이터를 배열로 변환
-            const finalLogs = Array.from(allLogsMap.values());
-            // 아래(최근)에서 위(과거)로 수집했으므로, 
-            // 원래 시간순(과거 -> 최근)으로 보려면 배열을 뒤집어야 합니다.
-            return finalLogs.reverse();
+            // chunks 구조: [[최신로그들], [그다음로그들], ..., [가장오래된로그들]]
+            // 1. 각 덩어리 내부의 순서도 위로 갈수록 과거이므로 뒤집어줍니다.
+            const processedChunks = chunks.map(chunk => chunk.reverse());
+
+            // 2. 덩어리 배열 자체를 뒤집어서 [가장오래된] -> [최신] 순서로 만듭니다.
+            processedChunks.reverse();
+
+            // 3. 모든 덩어리를 하나의 평평한 배열로 합칩니다.
+            return processedChunks.flat();
         }, chatContainerSelector);
 
         res.json({ success: true, logs: chatLogs });
