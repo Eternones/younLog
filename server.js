@@ -6,6 +6,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// 서버 깨우기
 app.get('/', (req, res) => res.send('Server is awake!'));
 
 app.post('/extract', async (req, res) => {
@@ -19,30 +20,30 @@ app.post('/extract', async (req, res) => {
         browser = await puppeteer.launch({
             headless: "new",
             executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath(),
-            // [중요] 프로토콜 타임아웃을 해제(0)하거나 아주 길게 설정
-            protocolTimeout: 0,
+            protocolTimeout: 0, // 타임아웃 무제한 (필수)
             args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
         });
 
         const page = await browser.newPage();
-        // 전체 작업 타임아웃 해제 (무제한)
-        page.setDefaultTimeout(0);
+        page.setDefaultTimeout(0); // 페이지 타임아웃 무제한
 
+        // 1. 페이지 접속
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });
 
         const chatContainerSelector = '.MuiList-root';
         await page.waitForSelector(chatContainerSelector, { timeout: 60000 }).catch(() => console.log("진행함"));
 
-        // === [최적화된 로직 시작] ===
-        // 브라우저 내부가 아니라 Node.js에서 루프를 제어합니다.
-
-        const allLogsMap = new Map(); // 전체 로그 저장소 (Node.js 메모리)
+        // 2. 고속 수집 루프 시작
+        const allLogsMap = new Map();
         let isFinished = false;
         let noChangeCount = 0;
-        const maxRetries = 30; // 멈춘 상태에서 약 30초 대기
+        const maxRetries = 20; // 데이터 끝 도달 판단 횟수
+        let lastMapSize = 0;
+
+        console.log("수집 시작...");
 
         while (!isFinished) {
-            // 1. 브라우저에게 "현재 화면 긁고 스크롤 올려" 명령 (짧게 실행됨)
+            // 브라우저에게 "수집하고 스크롤 올려" 명령
             const result = await page.evaluate((selector) => {
                 const list = document.querySelector(selector);
                 let scrollBox = list;
@@ -53,80 +54,77 @@ app.post('/extract', async (req, res) => {
                 }
                 if (!scrollBox) scrollBox = list?.parentElement;
 
-                // 데이터 수집
+                if (!scrollBox) return { chunk: [], isTop: true };
+
+                // 데이터 수집 (DOM 접근 최소화)
                 const items = document.querySelectorAll('.MuiListItem-root');
                 const chunk = [];
-                items.forEach(item => {
+                for (let i = 0; i < items.length; i++) {
+                    const item = items[i];
                     const nameEl = item.querySelector('h6');
                     const msgEl = item.querySelector('p');
-                    const imgEl = item.querySelector('img');
-
+                    
                     if (nameEl && msgEl) {
                         chunk.push({
                             name: nameEl.innerText.trim(),
                             message: msgEl.innerText.trim(),
-                            image: imgEl ? imgEl.src : null,
+                            image: item.querySelector('img')?.src || null,
                             nameColor: window.getComputedStyle(nameEl).color
                         });
                     }
-                });
+                }
 
-                // 스크롤 올리기
-                const prevScrollTop = scrollBox.scrollTop;
-                scrollBox.scrollBy(0, -2000);
-
+                // [최적화] 스크롤 보폭을 -4000으로 대폭 확대
+                const prevScroll = scrollBox.scrollTop;
+                scrollBox.scrollBy(0, -4000);
+                
                 return {
                     chunk,
-                    scrollTop: scrollBox.scrollTop,
                     isTop: scrollBox.scrollTop === 0
                 };
             }, chatContainerSelector);
 
-            // 2. 받아온 데이터를 Node.js의 Map에 저장 (중복 제거)
-            let newLogAdded = false;
-            // 역순으로 훑어서 저장 (최신 -> 과거 순으로 들어오므로)
+            // Node.js에서 중복 제거 및 저장
             for (const log of result.chunk) {
                 const key = `${log.name}_${log.message}_${log.image}`;
                 if (!allLogsMap.has(key)) {
                     allLogsMap.set(key, log);
-                    newLogAdded = true;
                 }
             }
 
-            // 3. 종료 조건 판단
-            // 맨 위에 도달했고, 새로운 데이터도 없다면 카운트 증가
-            if (result.isTop && !newLogAdded) {
-                noChangeCount++;
-                console.log(`수집 대기 중... (${noChangeCount}/${maxRetries})`);
-
-                if (noChangeCount >= maxRetries) {
-                    isFinished = true;
-                }
+            // [최적화 핵심] 속도 조절 로직
+            const currentSize = allLogsMap.size;
+            if (currentSize > lastMapSize) {
+                // 데이터가 새로 들어왔다면? -> 물 들어올 때 노 저어야 함!
+                // 대기 시간을 0.1초로 확 줄여서 바로 다음 스크롤 진행
+                noChangeCount = 0;
+                lastMapSize = currentSize;
+                await new Promise(r => setTimeout(r, 100)); 
             } else {
-                // 데이터가 추가됐거나 아직 스크롤이 남았다면 카운트 리셋
-                if (newLogAdded) noChangeCount = 0;
-                process.stdout.write(`수집 중... 현재 ${allLogsMap.size}개 \r`); // 진행상황 표시
+                // 데이터가 안 들어왔다면? -> 로딩 중이거나 끝임
+                // 0.5초 대기하며 재시도
+                noChangeCount++;
+                await new Promise(r => setTimeout(r, 500));
             }
 
-            // 4. Node.js 측에서 잠시 대기 (브라우저 과부하 방지 및 로딩 시간 벌기)
-            await new Promise(r => setTimeout(r, 800));
+            // 진행 상황 로그 (Render 콘솔에서 확인 가능)
+            if (currentSize % 500 === 0) {
+                console.log(`현재 ${currentSize}줄 수집 중... (상태: ${result.isTop ? '맨 위 도달' : '스크롤 중'})`);
+            }
+
+            // 종료 조건: 맨 위에 도달했고, 20번(약 10초) 동안 새 데이터가 없으면 끝
+            if (result.isTop && noChangeCount >= maxRetries) {
+                console.log("수집 완료!");
+                isFinished = true;
+            }
         }
 
-        // 5. 결과 정리
-        // 수집은 [최신 -> 과거] 순으로 섞여서 되었으므로,
-        // Map은 삽입 순서를 유지하되, 우리는 스크롤을 올리며 수집했으므로
-        // 결과적으로 allLogsMap.values()는 [최신 ... 과거]가 섞여있을 수 있음.
-        // 하지만 "덩어리" 단위 처리가 아니라 전체 맵이므로
-        // 단순히 뒤집는 게 아니라, 논리적으로 정렬이 필요할 수 있으나,
-        // 코코포리아 특성상 스크롤 역순 수집이므로 .reverse()가 가장 적합함.
-
+        // 3. 결과 반환 (역순 정렬)
         const finalLogs = Array.from(allLogsMap.values()).reverse();
-
-        console.log(`총 ${finalLogs.length}개의 로그 추출 완료`);
         res.json({ success: true, logs: finalLogs });
 
     } catch (error) {
-        console.error("Critical Error:", error);
+        console.error("Error:", error);
         res.status(500).json({ success: false, error: error.message });
     } finally {
         if (browser) await browser.close();
