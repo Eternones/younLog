@@ -41,74 +41,71 @@ app.post('/extract', async (req, res) => {
             console.log("선택자를 찾지 못했지만 진행합니다.");
         });
 
-        // 3. 모든 로그를 불러오기 위해 가장 위로 스크롤 (완전 강화판)
-        await page.evaluate(async (selector) => {
-            // 채팅 목록 요소를 먼저 찾습니다.
+        // 3 & 4. 실시간 수집 및 스크롤 로직 (수만 줄 대응 끝판왕)
+        const chatLogs = await page.evaluate(async (selector) => {
             const list = document.querySelector(selector);
-            if (!list) return;
-
-            // 실제로 스크롤바가 있는 부모 요소를 찾습니다. (가장 중요)
-            let container = list;
-            while (container) {
-                if (window.getComputedStyle(container).overflowY === 'auto' ||
-                    window.getComputedStyle(container).overflowY === 'scroll') {
-                    break;
-                }
-                container = container.parentElement;
+            // 실제 스크롤이 발생하는 부모 요소를 찾습니다.
+            let scrollBox = list;
+            while (scrollBox) {
+                if (window.getComputedStyle(scrollBox).overflowY === 'auto' ||
+                    window.getComputedStyle(scrollBox).overflowY === 'scroll') break;
+                scrollBox = scrollBox.parentElement;
             }
+            if (!scrollBox) scrollBox = list?.parentElement;
 
-            if (!container) container = list.parentElement; // 못 찾으면 직계 부모라도 지정
+            const allLogsMap = new Map(); // 중복 제거를 위한 맵
 
             await new Promise((resolve) => {
-                let lastItemCount = 0;
                 let sameCount = 0;
-                const maxRetries = 15; // 로딩 대기 횟수 대폭 증가
+                const maxRetries = 20; // 로딩 대기 횟수 (넉넉히)
 
                 const timer = setInterval(() => {
-                    // 맨 위로 강제 이동 (scrollTop을 0으로 고정 시도)
-                    container.scrollTo(0, 0);
-                    container.scrollBy(0, -500); // 추가로 위로 밀기
+                    // [수집] 현재 화면에 보이는 아이템들을 즉시 맵에 저장 (중복 자동 제거)
+                    const items = document.querySelectorAll('.MuiListItem-root');
+                    items.forEach(item => {
+                        const nameEl = item.querySelector('h6');
+                        const msgEl = item.querySelector('p');
+                        const imgEl = item.querySelector('img');
 
-                    const currentItems = document.querySelectorAll('.MuiListItem-root').length;
+                        if (nameEl && msgEl) {
+                            const name = nameEl.innerText.trim();
+                            const message = msgEl.innerText.trim();
+                            const image = imgEl ? imgEl.src : null;
+                            const nameColor = window.getComputedStyle(nameEl).color;
 
-                    // 데이터가 늘어났는지 확인
-                    if (currentItems === lastItemCount) {
-                        sameCount++;
-                        // 맨 위인데 데이터가 안 늘어난다면? (더 기다려봄)
-                        if (sameCount >= maxRetries) {
-                            clearInterval(timer);
-                            resolve();
+                            // 이름+메시지+이미지 조합을 키로 사용
+                            const key = `${name}_${message}_${image}`;
+                            if (!allLogsMap.has(key)) {
+                                allLogsMap.set(key, { name, message, image, nameColor });
+                            }
                         }
-                    } else {
-                        // 데이터가 늘어났다면! 다시 대기 카운트 초기화
-                        sameCount = 0;
-                        lastItemCount = currentItems;
+                    });
+
+                    // [스크롤] 맨 위로 강제 이동하여 새 데이터 트리거
+                    const lastCount = allLogsMap.size;
+                    scrollBox.scrollTo(0, 0);
+
+                    // [종료 체크] 맨 위에서 데이터가 더 이상 늘어나지 않는지 확인
+                    if (scrollBox.scrollTop === 0) {
+                        // 실제 Map의 사이즈가 변했는지로 데이터 추가 여부 판단
+                        if (allLogsMap.size === lastCount) {
+                            sameCount++;
+                            if (sameCount >= maxRetries) {
+                                clearInterval(timer);
+                                resolve();
+                            }
+                        } else {
+                            sameCount = 0; // 새 데이터가 들어왔으면 카운트 초기화
+                        }
                     }
-                }, 1000); // 로딩 시간을 1초로 넉넉히 줌
+                }, 800); // 0.8초 간격으로 반복
             });
+
+            // 수집된 Map을 배열로 변환하여 반환
+            return Array.from(allLogsMap.values());
         }, chatContainerSelector);
 
-        // 4. 데이터 추출
-        const chatLogs = await page.evaluate(() => {
-            const items = document.querySelectorAll('.MuiListItem-root');
-
-            return Array.from(items).map(item => {
-                const nameElement = item.querySelector('h6');
-                const messageElement = item.querySelector('p');
-                const imageElement = item.querySelector('img');
-
-                if (nameElement && messageElement) {
-                    return {
-                        name: nameElement.innerText.trim(),
-                        message: messageElement.innerText.trim(),
-                        image: imageElement ? imageElement.src : null,
-                        nameColor: window.getComputedStyle(nameElement).color
-                    };
-                }
-                return null;
-            }).filter(log => log !== null);
-        });
-
+        // 결과 응답 (추출 로직이 위에서 끝났으므로 바로 전송)
         res.json({ success: true, logs: chatLogs });
 
     } catch (error) {
