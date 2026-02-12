@@ -13,13 +13,13 @@ const CONFIG = {
 };
 
 app.post('/extract-direct', async (req, res) => {
-    const { url } = req.body; 
+    const { url } = req.body;
     try {
         const roomId = url.split('/').pop();
         if (!roomId) throw new Error("ID 추출 실패");
 
         const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${CONFIG.projectId}/databases/(default)/documents:runQuery?key=${CONFIG.apiKey}`;
-        
+
         const response = await axios.post(firestoreUrl, {
             structuredQuery: {
                 from: [{ collectionId: "messages" }],
@@ -53,7 +53,17 @@ app.post('/extract-direct', async (req, res) => {
 
         res.json({ success: true, logs });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        if (error.response) {
+            // Firebase가 보낸 상세 에러 메시지 확인
+            console.error("Firebase 에러 상세:", JSON.stringify(error.response.data, null, 2));
+            res.status(error.response.status).json({
+                success: false,
+                error: error.response.data.error.message || "권한이 없습니다."
+            });
+        } else {
+            console.error("일반 오류:", error.message);
+            res.status(500).json({ success: false, error: error.message });
+        }
     }
 });
 
