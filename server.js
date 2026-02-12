@@ -1,6 +1,3 @@
-// [수정] require 방식으로 통일
-const config = require("./apikey.js"); 
-
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
@@ -9,17 +6,17 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Render 환경 변수에서 값을 가져옵니다.
 const CONFIG = {
-    apiKey: config.apiKey,
-    projectId: config.projectId
+    apiKey: process.env.FIREBASE_API_KEY,
+    projectId: process.env.FIREBASE_PROJECT_ID || "ccfolia-160aa"
 };
 
 app.post('/extract-direct', async (req, res) => {
     const { url } = req.body; 
-    
     try {
         const roomId = url.split('/').pop();
-        if (!roomId) throw new Error("URL에서 방 ID를 찾을 수 없습니다.");
+        if (!roomId) throw new Error("ID 추출 실패");
 
         const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${CONFIG.projectId}/databases/(default)/documents:runQuery?key=${CONFIG.apiKey}`;
         
@@ -33,8 +30,7 @@ app.post('/extract-direct', async (req, res) => {
                         value: { stringValue: roomId }
                     }
                 },
-                // [정렬] ASCENDING은 '과거 -> 최신' (로그 스타일)
-                // 만약 '최신 -> 과거'를 원하시면 DESCENDING으로 바꾸세요.
+                // 시간순(과거->최신)으로 정렬하여 반전 방지
                 orderBy: [
                     { field: { fieldPath: "createdAt" }, direction: "ASCENDING" },
                     { field: { fieldPath: "__name__" }, direction: "ASCENDING" }
@@ -42,33 +38,26 @@ app.post('/extract-direct', async (req, res) => {
             }
         });
 
-        const rawData = response.data;
-        if (!rawData || !Array.isArray(rawData)) {
-            return res.json({ success: true, logs: [] });
-        }
-
-        const logs = rawData
+        const logs = (response.data || [])
             .filter(item => item.document)
             .map(item => {
-                const fields = item.document.fields;
+                const f = item.document.fields;
                 return {
-                    id: item.document.name.split('/').pop(),
-                    name: fields.name?.stringValue || "Unknown",
-                    message: fields.text?.stringValue || "",
-                    color: fields.color?.stringValue || "#000000",
-                    icon: fields.iconUrl?.stringValue || null,
-                    image: fields.imageUrl?.stringValue || null,
-                    timestamp: fields.createdAt?.timestampValue || ""
+                    name: f.name?.stringValue || "Unknown",
+                    message: f.text?.stringValue || "",
+                    color: f.color?.stringValue || "#000000",
+                    icon: f.iconUrl?.stringValue || null,
+                    image: f.imageUrl?.stringValue || null
                 };
             });
 
-        res.json({ success: true, logs: logs });
-
+        res.json({ success: true, logs });
     } catch (error) {
-        console.error("오류:", error.message);
-        res.status(500).json({ success: false, error: "데이터 추출 실패" });
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
-const PORT = 10000;
-app.listen(PORT, () => console.log(`서버 가동 중: ${PORT}`));
+app.get('/', (req, res) => res.send("Server is Running"));
+
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
